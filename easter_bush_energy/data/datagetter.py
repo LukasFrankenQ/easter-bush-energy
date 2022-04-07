@@ -129,9 +129,9 @@ class DataGetter:
 
         gasprices = pd.DataFrame({'price': pd.Series(np.ones(len(eprices)) * eprices.price.mean() / 4)})
         gasprices.index = eprices.index
-        
 
         return gasprices, eprices
+        
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -142,3 +142,13 @@ if __name__ == '__main__':
 
     heat, elec = getter.get_demand_data()
     gascost, ecost = getter.get_market_data()
+
+    fig, axs = plt.subplots(2, 1, figsize=(16, 8))
+
+    heat.Values.plot(ax=axs[0], label='heat')
+    elec.Values.plot(ax=axs[0], label='elec')
+
+    gascost.price.plot(ax=axs[1], label='gas')
+    ecost.price.plot(ax=axs[1], label='elec')
+
+    plt.show()
