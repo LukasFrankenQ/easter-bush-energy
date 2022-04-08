@@ -53,8 +53,77 @@ class DataGetter:
         self.heat_demand_path = heat_demand_path or os.path.join(data_path, 
                                             'UoE_energy_data', 
                                             'AMR_Data_for_meter_0795NH001S_Easter Bush Heat.XLSX',)
+        self.constraint_data_path = os.path.join(data_path, 
+                                            'day-ahead-constraints-limits-and-flow-output-v1.4-4-2-1-2.csv')
+
                         
-    
+        self.df_heat = None
+        self.df_elec = None
+        self.gas_cost = None
+        self.elec_cost = None
+        self.constraint_data = None
+
+
+    def get_constraint_data(self):
+        '''
+        Obtains the SCOTTISH constraints on the power generation
+
+        Args:
+            -
+
+        Returns:
+            df_constraints(pd.Series): constraint data
+
+        '''
+        if self.constraint_data is not None:
+            return self.constraint_data
+
+        df = pd.read_csv(self.constraint_data_path)
+        df.index = pd.to_datetime(df['Date (UTC)'], dayfirst=True)
+        df.drop(columns=['Date (UTC)'], inplace=True)
+        boundaries = ['SSE-SP', 'SCOTEX', 'SSHARN', 'SWALEX', 'SEIMP', 'ESTEX']
+        data = []
+
+        for b in boundaries:
+
+            df_1 = df.loc[df['Constraint Group'] == b].copy()
+            df_1.drop(columns=['Constraint Group'], inplace=True)
+            name1 = b + ' Limit (MW)'
+            name2 = b + ' Flow (MW)'
+            df_1.rename(columns={'Limit (MW)': name1, 'Flow (MW)': name2}, inplace=True)
+            df_1 = df_1[~df_1.index.duplicated(keep='first')]
+            data.append(df_1)
+
+        result = pd.concat(data, axis=1)
+
+        result.index = result.index - pd.Timedelta(weeks=52)
+        if self.snapshots is not None:
+            result = result.resample(self.freq).mean()
+            result = result.loc[self.snapshots[0]:self.snapshots[-1]]
+
+        result = result[[col for col in result.columns if 'SCOTEX' in col]]        
+
+        boundary = 'SCOTEX'
+        name1 = boundary + ' Limit (MW)'
+        name2 = boundary + ' Flow (MW)'
+        boundary_df = result[[name1, name2]]
+
+        q1 = boundary_df[name1].quantile(0.50)
+        q2 = boundary_df[name1].quantile(0.95)
+        boundary_df[name1] = np.where(boundary_df[name1] > q2, q1, boundary_df[name1])
+        max_flow = boundary_df[name1].max()
+
+        boundary_df[name2].values[boundary_df[name2] > max_flow] = max_flow
+
+        result = boundary_df
+
+        self.constraint_data = result
+        return result
+
+
+
+
+
     def get_demand_data(self):
         '''
         Loads data from easter bush sensors and rearranges it to a dataframe with time index
@@ -67,6 +136,9 @@ class DataGetter:
             df_elec(pd.DataFrame): electricity demand data
 
         '''
+
+        if self.df_heat is not None:
+            return self.df_heat, self.df_elec
 
         elec_demand = self.elec_demand_path
         heat_demand = self.heat_demand_path
@@ -102,8 +174,14 @@ class DataGetter:
             df_heat = df_heat.resample(self.freq).sum() 
             df_elec = df_elec.resample(self.freq).sum() 
             
-            df_heat = df_heat.loc[self.snapshots]
-            df_elec = df_elec.loc[self.snapshots]
+            df_heat = df_heat.loc[self.snapshots[0]:self.snapshots[-1]]
+            df_elec = df_elec.loc[self.snapshots[0]:self.snapshots[-1]]
+        
+        df_heat = df_heat.Values
+        df_elec = df_elec.Values
+
+        self.df_heat = df_heat
+        self.df_elec = df_elec
 
         return df_heat, df_elec
 
@@ -114,6 +192,8 @@ class DataGetter:
         Also passes a time series of gas prices
         '''
 
+        if self.elec_cost is not None:
+            return self.gas_cost, self.elec_cost
 
         eprices = pd.read_csv(self.elec_cost_path, parse_dates=True, header=None, index_col=0)
 
@@ -129,6 +209,11 @@ class DataGetter:
 
         gasprices = pd.DataFrame({'price': pd.Series(np.ones(len(eprices)) * eprices.price.mean() / 4)})
         gasprices.index = eprices.index
+        gasprices = gasprices['price']
+        eprices = eprices['price']
+
+        self.gas_cost = gasprices
+        self.elec_cost = eprices 
 
         return gasprices, eprices
         

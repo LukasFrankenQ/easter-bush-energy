@@ -193,3 +193,41 @@ def add_small_storage_and_heat_pump(network, getter):
         network.model.heatpump = Constraint(list(snapshots), rule=heatpump_func)
 
     return extra_functionality 
+
+
+
+def add_seasonal_storage_and_heat_pump(network, getter):
+    '''
+    Adds thermal storage with capacity fitted to the energy demand
+    for a single day.
+
+    Args:
+        network(pypsa.Network): demand is added here
+        getter(DataGetter): see easter_bush_energy/data/datagetter.py
+
+    '''
+
+    heatpump_cop = 2.5
+    heatpump_p_nom = 1500
+
+    heat_demand, _ = getter.get_demand_data()
+    storage_e_nom = heat_demand.sum() / 2.
+
+    constraint = getter.get_constraint_data()
+
+    # charging stes when wind power is curtailed
+    curtail_threshold = 100
+    curt = (constraint['SCOTEX Limit (MW)'] - constraint['SCOTEX Flow (MW)']) < curtail_threshold
+    curt = curt.astype(float)
+
+    # store
+    network.add('Bus', 'curtailbus', carrier='elec')
+    network.add('Generator', 'curtailgen', bus='curtailbus', p_nom=2000, p_max_pu=curt)
+    #                marginal_cost=pd.Series(np.zeros_like(network.snapshots)))
+
+    network.add('Bus', 'stesbus', carrier='heat')
+    network.add('Store', 'stes', bus='stesbus', carrier='heat', e_nom=storage_e_nom)
+    network.add('Link', 'heatpump2stes', bus0='curtailbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
+    # can discharge into the smaller storage
+    network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=0.9, 
+                    p_nom=heatpump_p_nom/10)

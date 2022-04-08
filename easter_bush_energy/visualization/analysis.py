@@ -16,7 +16,10 @@ def analyse(network):
     # Obtain total system cost
     costs = pd.DataFrame()
     for col in network.generators_t.p.columns:
-        costs[col] = network.generators_t.p[col] * network.generators_t.marginal_cost[col]
+        try:
+            costs[col] = network.generators_t.p[col] * network.generators_t.marginal_cost[col]
+        except KeyError:
+            continue
 
     comps = ['generators', 'links', 'loads', 'cost', 'stores']    
 
@@ -62,6 +65,6 @@ def analyse(network):
     print(f'Total Emission by Gas approx {emission} kg.')
 
     print(f'\n Total operating cost by component:')
-    print(costs.sum())
+    print(costs.sum() * 0.01)
     print(f'\n Grand Total Operating Cost: {round(costs.sum().sum()*0.01)} Pound.')
 
