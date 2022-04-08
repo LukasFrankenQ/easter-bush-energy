@@ -154,3 +154,42 @@ def add_chp(network, getter):
 
     
     return extra_functionality
+
+
+def add_small_storage_and_heat_pump(network, getter):
+    '''
+    Adds thermal storage with capacity fitted to the energy demand
+    for a single day.
+
+    Args:
+        network(pypsa.Network): demand is added here
+        getter(DataGetter): see easter_bush_energy/data/datagetter.py
+
+    '''
+
+    heatpump_cop = 2.5
+    heatpump_p_nom = 1500
+
+    heat_demand, _ = getter.get_demand_data()
+    storage_e_nom = heat_demand.resample('d').sum().max()
+    
+    # store
+    network.add('Bus', 'storebus', carrier='heat')
+    network.add('Store', 'store', bus='storebus', carrier='heat', e_nom=storage_e_nom)
+    network.add('Link', 'store2heatload', bus0='storebus', bus1='heatloadbus', efficiency=0.9, p_nom=heatpump_p_nom)
+    network.add('Link', 'heatpump2store', bus0='elecmarketbus', bus1='storebus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
+    network.add('Link', 'heatpump2load', bus0='elecmarketbus', bus1='heatloadbus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
+
+    def extra_functionality(network, snapshots):
+
+        # force heatpump to distribute between charging storage and meeting heat demand
+        def heatpump_func(model, snapshot):
+            return (
+                model.link_p["heatpump2store", snapshot] +
+                model.link_p["heatpump2load", snapshot] 
+                <= network.links.at['heatpump2store', 'p_nom']
+            )
+
+        network.model.heatpump = Constraint(list(snapshots), rule=heatpump_func)
+
+    return extra_functionality 
