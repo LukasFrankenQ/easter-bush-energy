@@ -25,7 +25,15 @@ def analyse(network):
 
     fig, axs = plt.subplots(5, 1, figsize=(16, 20))
 
-    for comp, ax in zip(comps, axs):
+    ylabels = [
+        'Power [kW]',
+        'Power [kW]',
+        'Power [kW]',
+        f'Cost [{chr(163)}]',
+        'Energy [kWh]'
+    ]
+
+    for comp, ax, ylabel in zip(comps, axs, ylabels):
 
         get_costs = False
         plotattr = 'p'
@@ -48,23 +56,59 @@ def analyse(network):
         if get_costs:
             df = costs
 
+        # plot results as area plot (sorted by variance)
         try:
-            df.plot.area(ax=ax)
+            df[df.var(axis=0).sort_values().index].plot.area(ax=ax)
         except TypeError:
             continue
 
         ax.legend()
 
+        ax.set_ylabel(ylabel)
+
+
     plt.show()
+
 
     # co2 emission per (gas powered) tech:
     gas_gen = list(network.buses.loc[network.buses.carrier == 'gas'].generator)
     gas_gen = network.generators_t.p[gas_gen] 
 
-    emission = round(gas_gen.sum().sum() * 0.184)   
-    print(f'Total Emission by Gas approx {emission} kg.')
+    gas_emission = round(gas_gen.sum().sum() * 0.184)   
+
+    elec_gen = network.buses.loc[network.buses.carrier == 'elec']
+    elec_gen = list(elec_gen.dropna().generator)
+    elec_gen = network.generators_t.p[elec_gen] 
+
+    elec_emission = round(elec_gen.sum().sum() * 0.024)   
+
+    print(f'Emission by Gas approx {gas_emission} kg.')
+    print(f'Emission by Electric Grid approx {elec_emission} kg.')
+    print(f'Total Emission approx {gas_emission + elec_emission} kg.')
 
     print(f'\n Total operating cost by component:')
     print(costs.sum() * 0.01)
     print(f'\n Grand Total Operating Cost: {round(costs.sum().sum()*0.01)} Pound.')
+
+    result_dict = dict()
+    result_dict['gas_used'] = round(gas_gen.sum().sum())
+    result_dict['elec_used'] = round(elec_gen.sum().sum())
+    result_dict['gas_emission'] = round(gas_emission)
+    result_dict['elec_emission'] = round(elec_emission)
+    result_dict['operating_cost'] = round(costs.sum().sum() * 0.01)
+
+    investments = list()
+    for _, link in network.links.iterrows():
+
+        if link.capital_cost > 0.:
+            investment = link.capital_cost * link.p_nom_opt
+            result_dict[link+'_investment'] = investment
+            investments.append(investment)
+            print(f'Investment into link {link.attribute}: {investment}')
+
+    result_dict['total_investment'] = sum(investments) 
+    print(f'Total upfront investments: {sum(investments)}')
+
+    return result_dict
+
 

@@ -1,3 +1,4 @@
+from tracemalloc import Snapshot
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
@@ -33,8 +34,10 @@ class DataGetter:
     def __init__(self,
                  snapshots=None,
                  elec_cost_path=None,
+                 gas_cost_path=None,
                  heat_demand_path=None,
-                 elec_demand_path=None):
+                 elec_demand_path=None,
+                 ):
         '''
         Sets up paths
         '''
@@ -55,7 +58,8 @@ class DataGetter:
                                             'AMR_Data_for_meter_0795NH001S_Easter Bush Heat.XLSX',)
         self.constraint_data_path = os.path.join(data_path, 
                                             'day-ahead-constraints-limits-and-flow-output-v1.4-4-2-1-2.csv')
-
+        self.gas_cost_path = gas_cost_path or os.path.join(data_path, 
+                                            'natural_gas_futures_historical_data.csv')
                         
         self.df_heat = None
         self.df_elec = None
@@ -119,9 +123,6 @@ class DataGetter:
 
         self.constraint_data = result
         return result
-
-
-
 
 
     def get_demand_data(self):
@@ -200,16 +201,23 @@ class DataGetter:
         eprices = eprices.rename(columns={4: 'price'})
         eprices = eprices[['price']]
 
-        eprices.index = eprices.index - pd.Timedelta(weeks=52)
+        eprices.index = eprices.index - pd.Timedelta(weeks=52, days=1)
 
         if self.snapshots is not None:
 
             eprices = eprices.resample(self.freq).mean()
             eprices = eprices.loc[self.snapshots[0]:self.snapshots[-1]]
 
-        gasprices = pd.DataFrame({'price': pd.Series(np.ones(len(eprices)) * eprices.price.mean() / 4)})
-        gasprices.index = eprices.index
-        gasprices = gasprices['price']
+        gas = pd.read_csv(self.gas_cost_path, parse_dates=True, index_col=0)
+        gas = gas[::-1]
+        gas = gas.resample(self.freq).ffill()
+        gas = gas[['Price']]
+        gas = gas.rename(columns={'Price': 'price'})
+        if self.snapshots is not None:
+            gas = gas.loc[self.snapshots[0]:self.snapshots[-1]]
+        gas.index = eprices.index
+
+        gasprices = gas['price']
         eprices = eprices['price']
 
         self.gas_cost = gasprices

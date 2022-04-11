@@ -8,7 +8,9 @@ from pyomo.environ import Constraint
 
 def setup_carrier(network):
     network.add('Carrier', 'heat')
-    network.add('Carrier', 'elec')
+    network.add('Carrier', 'elec', co2emissions=0.024)
+    # electricity scotland value: 0.024 kg/kWh
+    # electricity UK value: 0.233 kg/kWh
     network.add('Carrier', 'gas', co2emissions=0.184)
 
 
@@ -81,13 +83,13 @@ def add_boiler(network, getter):
 
     gas_mcost.index = network.snapshots
 
-    boiler_efficiency = 0.95
+    boiler_efficiency = 0.9
     p_nom_boiler = 8000.
 
     # boiler
     network.add('Bus', 'gasmarket_boiler_bus', carrier='gas')
     network.add('Generator', 'gasmarket_boiler', bus='gasmarket_boiler_bus', marginal_cost=gas_mcost, p_nom=p_nom_boiler)
-    network.add('Link', 'boiler', bus0='gasmarket_boiler_bus', bus1='heatloadbus', efficiency=0.95, p_nom=p_nom_boiler)
+    network.add('Link', 'boiler', bus0='gasmarket_boiler_bus', bus1='heatloadbus', efficiency=boiler_efficiency, p_nom=p_nom_boiler)
 
 
 def add_chp(network, getter):
@@ -171,7 +173,7 @@ def add_small_storage_and_heat_pump(network, getter):
     heatpump_p_nom = 1500
 
     heat_demand, _ = getter.get_demand_data()
-    storage_e_nom = heat_demand.resample('d').sum().max()
+    storage_e_nom = 3500
     
     # store
     network.add('Bus', 'storebus', carrier='heat')
