@@ -172,8 +172,8 @@ class DataGetter:
         df_elec = fix_df_shape(df_elec)
 
         if self.snapshots is not None:
-            df_heat = df_heat.resample(self.freq).sum() 
-            df_elec = df_elec.resample(self.freq).sum() 
+            df_heat = df_heat.resample(self.freq).mean() 
+            df_elec = df_elec.resample(self.freq).mean() 
             
             df_heat = df_heat.loc[self.snapshots[0]:self.snapshots[-1]]
             df_elec = df_elec.loc[self.snapshots[0]:self.snapshots[-1]]

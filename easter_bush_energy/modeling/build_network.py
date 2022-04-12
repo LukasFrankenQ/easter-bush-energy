@@ -198,7 +198,7 @@ def add_small_storage_and_heat_pump(network, getter):
 
 
 
-def add_seasonal_storage_and_heat_pump(network, getter):
+def add_seasonal_storage_and_heat_pump(network, getter, hp_power=1500, dT=40):
     '''
     Adds thermal storage with capacity fitted to the energy demand
     for a single day.
@@ -209,8 +209,14 @@ def add_seasonal_storage_and_heat_pump(network, getter):
 
     '''
 
-    heatpump_cop = 2.5
-    heatpump_p_nom = 1500
+    def get_hp_cop(p, dT=40):
+        return (0.4113 * np.log(p) - 0.2575) * (23.9 * dT**(-0.747))
+
+    def get_hp_cost(p):
+        return 8518.9 * p**(-0.245) * p
+
+    heatpump_cop = get_hp_cop(hp_power, dT=dT)
+    heatpump_p_nom = hp_power
 
     heat_demand, _ = getter.get_demand_data()
     storage_e_nom = heat_demand.sum() / 2.
@@ -231,5 +237,7 @@ def add_seasonal_storage_and_heat_pump(network, getter):
     network.add('Store', 'stes', bus='stesbus', carrier='heat', e_nom=storage_e_nom)
     network.add('Link', 'heatpump2stes', bus0='curtailbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
     # can discharge into the smaller storage
-    network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=0.9, 
+    network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=0.95, 
                     p_nom=heatpump_p_nom/10)
+            
+    network.links.at['heatpump2stes', 'capital_cost'] = get_hp_cost(hp_power) / hp_power
