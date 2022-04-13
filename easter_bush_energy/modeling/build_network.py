@@ -169,8 +169,10 @@ def add_small_storage_and_heat_pump(network, getter):
 
     '''
 
-    heatpump_cop = 2.5
+    def get_hp_cop(p, dT=40):
+        return (0.4113 * np.log(p) - 0.2575) * (23.9 * dT**(-0.747))
     heatpump_p_nom = 1500
+    heatpump_cop = get_hp_cop(heatpump_p_nom)
 
     heat_demand, _ = getter.get_demand_data()
     storage_e_nom = 3500
@@ -197,8 +199,7 @@ def add_small_storage_and_heat_pump(network, getter):
     return extra_functionality 
 
 
-
-def add_seasonal_storage_and_heat_pump(network, getter, hp_power=1500, dT=40):
+def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=None):
     '''
     Adds thermal storage with capacity fitted to the energy demand
     for a single day.
@@ -209,17 +210,12 @@ def add_seasonal_storage_and_heat_pump(network, getter, hp_power=1500, dT=40):
 
     '''
 
-    def get_hp_cop(p, dT=40):
-        return (0.4113 * np.log(p) - 0.2575) * (23.9 * dT**(-0.747))
-
-    def get_hp_cost(p):
-        return 8518.9 * p**(-0.245) * p
-
-    heatpump_cop = get_hp_cop(hp_power, dT=dT)
-    heatpump_p_nom = hp_power
-
     heat_demand, _ = getter.get_demand_data()
-    storage_e_nom = heat_demand.sum() / 2.
+    if storage_e_nom is None:
+        storage_e_nom = heat_demand.sum() / 2.
+    print('Using storage heat capacity: ', storage_e_nom)
+    vol = storage_e_nom / (4.182 * 2.7778e-7 * 40) # (40: dT, 4.182: spec.heat.cap.water, rest: conversion const)
+    investment_cost = vol * 2600 * vol**(-0.47)
 
     constraint = getter.get_constraint_data()
 
@@ -234,10 +230,32 @@ def add_seasonal_storage_and_heat_pump(network, getter, hp_power=1500, dT=40):
     #                marginal_cost=pd.Series(np.zeros_like(network.snapshots)))
 
     network.add('Bus', 'stesbus', carrier='heat')
-    network.add('Store', 'stes', bus='stesbus', carrier='heat', e_nom=storage_e_nom)
+    network.add('Store', 
+                'stes', 
+                bus='stesbus', 
+                carrier='heat', 
+                e_nom=storage_e_nom,
+                e_cyclic=True,
+                capital_cost=investment_cost)
+
+    heatpump_cop = network.links.at['heatpump2store', 'efficiency']
+    heatpump_p_nom = network.links.at['heatpump2store', 'p_nom']
     network.add('Link', 'heatpump2stes', bus0='curtailbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
     # can discharge into the smaller storage
     network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=0.95, 
                     p_nom=heatpump_p_nom/10)
+
             
-    network.links.at['heatpump2stes', 'capital_cost'] = get_hp_cost(hp_power) / hp_power
+    def stes_extra_functionality(network, snapshots):
+
+        # force heatpump to distribute between charging storage and meeting heat demand
+        def stes_heatpump_func(model, snapshot):
+            return (
+                model.link_p["heatpump2store", snapshot] +
+                model.link_p["heatpump2load", snapshot] +
+                model.link_p["heatpump2stes", snapshot] 
+                <= network.links.at['heatpump2store', 'p_nom'])
+
+        network.model.heatpump = Constraint(list(snapshots), rule=stes_heatpump_func)
+
+    return stes_extra_functionality

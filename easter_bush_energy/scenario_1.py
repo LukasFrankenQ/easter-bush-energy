@@ -24,7 +24,7 @@ from easter_bush_energy.visualization.analysis import analyse
 if __name__ == '__main__':
     
 
-    snapshots = pd.date_range('2019-01-01', '2019-01-10', freq='30min')
+    snapshots = pd.date_range('2019-01-01', '2020-01-10', freq='30min')
     getter = DataGetter(snapshots=snapshots)
 
     network = pypsa.Network()

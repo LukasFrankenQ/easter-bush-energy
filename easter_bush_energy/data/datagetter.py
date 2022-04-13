@@ -187,8 +187,11 @@ class DataGetter:
         return df_heat, df_elec
 
 
-    def get_market_data(self):
+    def get_market_data(self, static_gas_cost=True):
         '''
+        Args:
+            static_gas_cost(bool): If True, gas cost is set to constant value
+
         Obtains time series of wholesale electricity prices
         Also passes a time series of gas prices
         '''
@@ -218,6 +221,10 @@ class DataGetter:
         gas.index = eprices.index
 
         gasprices = gas['price']
+
+        if static_gas_cost: 
+            gasprices = pd.Series(np.ones(len(gasprices)) * gasprices.mean())
+
         eprices = eprices['price']
 
         self.gas_cost = gasprices

@@ -25,10 +25,9 @@ from easter_bush_energy.modeling.build_network import (
 from easter_bush_energy.visualization.analysis import analyse
 
 
-if __name__ == '__main__':
-    
+def run_scenario_3(start='2019-01-01', end='2019-02-01'):
 
-    snapshots = pd.date_range('2019-01-01', '2020-01-01', freq='30min')
+    snapshots = pd.date_range(start, end, freq='30min')
     getter = DataGetter(snapshots=snapshots)
 
     network = pypsa.Network()
@@ -42,14 +41,22 @@ if __name__ == '__main__':
 
     chp_func = add_chp(network, getter)
 
-    heatpump_func = add_small_storage_and_heat_pump(network, getter)
+    add_small_storage_and_heat_pump(network, getter)
 
+    stes_extra_functionality = add_seasonal_storage_and_heat_pump(network, getter)    
+    
     def extra_functionality(network, snapshots):
         chp_func(network, snapshots)
-        heatpump_func(network, snapshots)
-
-    add_seasonal_storage_and_heat_pump(network, getter)    
+        stes_extra_functionality(network, snapshots)
     
     network.lopf(solver_name='gurobi', extra_functionality=extra_functionality)
 
-    analyse(network)
+    results = analyse(network)
+
+    print(results)
+
+    return results
+
+
+if __name__ == "__main__":
+    results = run_scenario_3()

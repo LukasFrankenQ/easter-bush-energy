@@ -98,17 +98,18 @@ def analyse(network):
     result_dict['operating_cost'] = round(costs.sum().sum() * 0.01)
 
     pypsa_components = ['links', 'generators', 'stores']
-    pypsa_costpoints = ['p_nom', 'p_nom', 'e_nom']
+    # pypsa_costpoints = ['p_nom', 'p_nom', 'e_nom']
 
     investments = list()
-    for comp, costpoint in zip(pypsa_components, pypsa_costpoints):
+    # for comp, costpoint in zip(pypsa_components, pypsa_costpoints):
+    for comp in pypsa_components:
         if getattr(network, comp).empty:
             continue
 
         for _, part in getattr(network, comp).iterrows():
 
             if part.capital_cost > 0.:
-                investment = part.capital_cost * getattr(part, costpoint)
+                investment = part.capital_cost
                 result_dict[part.name+'_investment'] = investment
                 investments.append(investment)
                 print(f'Investment into link {part.name}: {investment}')
