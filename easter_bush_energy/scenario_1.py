@@ -13,6 +13,7 @@ sys.path.append(PROJECT_ROOT)
 
 from easter_bush_energy.data.datagetter import DataGetter
 from easter_bush_energy.modeling.build_network import (
+            setup_carriers,
             add_demand, 
             connect_elec_market, 
             add_boiler,
@@ -23,11 +24,14 @@ from easter_bush_energy.visualization.analysis import analyse
 
 if __name__ == '__main__':
     
+    print('Running Scenario 1: Just a CHP, boiler and electricity market \n \
+        meeting the demand at easter bush.')
 
     snapshots = pd.date_range('2019-01-01', '2020-01-10', freq='30min')
     getter = DataGetter(snapshots=snapshots)
 
     network = pypsa.Network()
+    setup_carriers(network, getter)
 
     network.snapshots = snapshots
 

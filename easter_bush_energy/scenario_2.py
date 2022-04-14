@@ -14,6 +14,7 @@ sys.path.append(PROJECT_ROOT)
 
 from easter_bush_energy.data.datagetter import DataGetter
 from easter_bush_energy.modeling.build_network import (
+            setup_carriers,
             add_demand, 
             connect_elec_market, 
             add_boiler,
@@ -23,12 +24,27 @@ from easter_bush_energy.modeling.build_network import (
 from easter_bush_energy.visualization.analysis import analyse
 
 
-def run_scenario_2(start='2019-01-01', end='2019-02-01'):
+def run_scenario_2(start='2019-01-01', end='2019-02-01', dT_sts=40):
+    '''
+    Scenario 2: An approximation to the actual energy system at Easter Bush Campus:
+        It includes:
+            CHP
+            HP
+                supplies 100m**3 hot water tanks, heat demand
+            Boiler
+            Electricity Market
+
+    Args:
+        start(str): start time of simulation
+        end(str): end time of simulation
+        dT(float): temperature difference in storage tank
+    '''
 
     snapshots = pd.date_range(start, end, freq='30min')
     getter = DataGetter(snapshots=snapshots)
 
     network = pypsa.Network()
+    setup_carriers(network, getter)
 
     network.snapshots = snapshots
 
@@ -38,7 +54,7 @@ def run_scenario_2(start='2019-01-01', end='2019-02-01'):
 
     chp_func = add_chp(network, getter)
 
-    heatpump_func = add_small_storage_and_heat_pump(network, getter)
+    heatpump_func = add_small_storage_and_heat_pump(network, getter, dT_sts)
 
     def extra_functionality(network, snapshots):
         chp_func(network, snapshots)

@@ -6,12 +6,29 @@ from pyomo.environ import Constraint
 
 #  0.184kg
 
-def setup_carrier(network):
-    network.add('Carrier', 'heat')
-    network.add('Carrier', 'elec', co2emissions=0.024)
+def setup_carriers(network, getter):
+    '''
+    Sets up the resources used in the simulation.
+    Respects the simulation time-step by adapting emissions
+
+    Args:
+        network(pypsa.Network): network investigated
+        getter(DataGetter as in data/datagetter.py): stores chosen frequency
+    '''
+    
+
     # electricity scotland value: 0.024 kg/kWh
     # electricity UK value: 0.233 kg/kWh
-    network.add('Carrier', 'gas', co2emissions=0.184)
+    elec_emission = 0.024  # kg/kWh
+    gas_emission = 0.184   # kg/kWh
+
+    if '30' in getter.freq:
+        gas_emission = gas_emission / 2
+        elec_emission = elec_emission / 2
+
+    network.add('Carrier', 'elec', co2_emissions=elec_emission)
+    network.add('Carrier', 'gas', co2_emissions=gas_emission)
+    network.add('Carrier', 'heat')
 
 
 def add_demand(network, getter):
@@ -78,7 +95,7 @@ def add_boiler(network, getter):
         the modified network
 
     '''
-    gas_mcost, _, = getter.get_market_data()
+    gas_mcost, _ = getter.get_market_data()
     heat_demand, _ = getter.get_demand_data()
 
     gas_mcost.index = network.snapshots
@@ -158,7 +175,7 @@ def add_chp(network, getter):
     return extra_functionality
 
 
-def add_small_storage_and_heat_pump(network, getter):
+def add_small_storage_and_heat_pump(network, getter, dT=40):
     '''
     Adds thermal storage with capacity fitted to the energy demand
     for a single day.
@@ -172,7 +189,9 @@ def add_small_storage_and_heat_pump(network, getter):
     def get_hp_cop(p, dT=40):
         return (0.4113 * np.log(p) - 0.2575) * (23.9 * dT**(-0.747))
     heatpump_p_nom = 1500
-    heatpump_cop = get_hp_cop(heatpump_p_nom)
+    heatpump_cop = get_hp_cop(heatpump_p_nom, dT=dT)
+    if '30' in getter.freq:
+        heatpump_p_nom = heatpump_p_nom / 2.
 
     heat_demand, _ = getter.get_demand_data()
     storage_e_nom = 3500
@@ -214,13 +233,13 @@ def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=Non
     if storage_e_nom is None:
         storage_e_nom = heat_demand.sum() / 2.
     print(f'Using storage heat capacity: {storage_e_nom} kWh')
-    vol = storage_e_nom / (4.182 * 1000 * 1000 * 2.7778e-7 * 40) # (40: dT, 4.182: spec.heat.cap.water, rest: conversion const)
+    vol = storage_e_nom / (4.182 * 1000 * 1000 * 2.7778e-7 * dT) # (40: dT, 4.182: spec.heat.cap.water, rest: conversion const)
+    vol = storage_e_nom / (1000 * 0.000556 * 40) # (40: dT, 0.000556: spec.heat.cap.water, 1000: kg/m**3)
     print(f'With volume: {vol} m**3')
     investment_cost = vol * 2600 * vol**(-0.47)
     print('Which results in investment cost: ', investment_cost)
 
     constraint = getter.get_constraint_data()
-
     # charging stes when wind power is curtailed
     curtail_threshold = 100
     curt = (constraint['SCOTEX Limit (MW)'] - constraint['SCOTEX Flow (MW)']) < curtail_threshold
@@ -237,15 +256,20 @@ def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=Non
                 bus='stesbus', 
                 carrier='heat', 
                 e_nom=storage_e_nom,
-                e_cyclic=True,
+                #e_cyclic=True,
                 capital_cost=investment_cost)
 
     heatpump_cop = network.links.at['heatpump2store', 'efficiency']
-    heatpump_p_nom = network.links.at['heatpump2store', 'p_nom']
-    network.add('Link', 'heatpump2stes', bus0='curtailbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
+
+    # power to charge seasonal storage from Renaldi et al. 2017
+    heatpump_stes_p_nom = 170 # kW
+    if '30' in getter.freq:
+        heatpump_stes_p_nom = heatpump_stes_p_nom / 2. # kW
+
+    network.add('Link', 'heatpump2stes', bus0='curtailbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_stes_p_nom)
     # can discharge into the smaller storage
     network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=0.95, 
-                    p_nom=heatpump_p_nom/10)
+                    p_nom=heatpump_stes_p_nom)
 
             
     def stes_extra_functionality(network, snapshots):

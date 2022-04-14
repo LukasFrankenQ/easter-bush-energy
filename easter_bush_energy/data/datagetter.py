@@ -221,11 +221,16 @@ class DataGetter:
         gas.index = eprices.index
 
         gasprices = gas['price']
+        eprices = eprices['price']
+
+        # adjust to freq
+        if '30' in self.freq:
+            eprices = eprices / 2.
 
         if static_gas_cost: 
-            gasprices = pd.Series(np.ones(len(gasprices)) * gasprices.mean())
+            # gasprices = pd.Series(np.ones(len(gasprices)) * gasprices.mean())
+            gasprices = pd.Series(np.ones(len(eprices)) * eprices.mean() / 2., index=eprices.index)
 
-        eprices = eprices['price']
 
         self.gas_cost = gasprices
         self.elec_cost = eprices 

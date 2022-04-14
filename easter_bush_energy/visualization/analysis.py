@@ -15,25 +15,27 @@ def analyse(network):
 
     # Obtain total system cost
     costs = pd.DataFrame()
+    marginal_costs = pd.DataFrame()
     for col in network.generators_t.p.columns:
         try:
             costs[col] = network.generators_t.p[col] * network.generators_t.marginal_cost[col]
+            marginal_costs[col] = network.generators_t.marginal_cost[col]
         except KeyError:
             continue
 
     comps = ['generators', 'links', 'loads', 'cost', 'stores']    
 
-    fig, axs = plt.subplots(5, 1, figsize=(16, 20))
+    fig, axs = plt.subplots(6, 1, figsize=(16, 24))
 
     ylabels = [
         'Power [kW]',
         'Power [kW]',
         'Power [kW]',
-        f'Cost [{chr(163)}]',
+        f'Cost [{chr(163)}/kWh]',
         'Energy [kWh]'
     ]
 
-    for comp, ax, ylabel in zip(comps, axs, ylabels):
+    for comp, ax, ylabel in zip(comps, axs[:-1], ylabels):
 
         get_costs = False
         plotattr = 'p'
@@ -42,7 +44,7 @@ def analyse(network):
         if comp == 'cost':
             get_costs = True
             comp = 'generators'
-            title = 'generation costs'
+            title = 'marginal generation costs'
             plotattr = 'marginal_cost'
         elif comp == 'stores':
             plotattr = 'e'
@@ -54,17 +56,29 @@ def analyse(network):
         # df = network[comp+'_t'][plotattr]
         df = getattr(network, comp+'_t')[plotattr]
         if get_costs:
-            df = costs
+            df = marginal_costs
 
         # plot results as area plot (sorted by variance)
         try:
-            df[df.var(axis=0).sort_values().index].plot.area(ax=ax)
+            if get_costs:
+                df[df.var(axis=0).sort_values().index].plot(ax=ax)
+            else:
+                df[df.var(axis=0).sort_values().index].plot.area(ax=ax)
         except TypeError:
             continue
 
         ax.legend()
 
         ax.set_ylabel(ylabel)
+
+    lp = network.links_t['p0']
+    lp = lp[[col for col in lp.columns if 'heatpump2' in col]]
+    lp[lp.var(axis=0).sort_values().index].plot.area(ax=axs[-1])
+    axs[-1].set_ylabel('Power [kW]')
+    axs[-1].set_title('Heat Pump usage')
+    axs[-1].legend()
+
+
     plt.show()
 
 
