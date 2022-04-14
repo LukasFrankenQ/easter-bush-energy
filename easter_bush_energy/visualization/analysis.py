@@ -65,14 +65,12 @@ def analyse(network):
         ax.legend()
 
         ax.set_ylabel(ylabel)
-
-
     plt.show()
 
 
     # co2 emission per (gas powered) tech:
-    gas_gen = list(network.buses.loc[network.buses.carrier == 'gas'].generator)
-    gas_gen = network.generators_t.p[gas_gen] 
+    gas_gen_index = list(network.buses.loc[network.buses.carrier == 'gas'].generator)
+    gas_gen = network.generators_t.p[gas_gen_index] 
 
     gas_emission = round(gas_gen.sum().sum() * 0.184)   
 
@@ -92,7 +90,9 @@ def analyse(network):
 
     result_dict = dict()
     result_dict['gas_used'] = round(gas_gen.sum().sum())
+    result_dict['gas_tariff'] = network.generators_t.marginal_cost[gas_gen_index].mean().mean()
     result_dict['elec_used'] = round(elec_gen.sum().sum())
+    result_dict['gas_used'] = round(gas_gen.sum().sum())
     result_dict['gas_emission'] = round(gas_emission)
     result_dict['elec_emission'] = round(elec_emission)
     result_dict['operating_cost'] = round(costs.sum().sum() * 0.01)
@@ -112,9 +112,9 @@ def analyse(network):
                 investment = part.capital_cost
                 result_dict[part.name+'_investment'] = investment
                 investments.append(investment)
-                print(f'Investment into link {part.name}: {investment}')
+                print(f'Investment into link {part.name}: {round(investment)} Pound')
 
-    result_dict['total_investment'] = sum(investments) 
-    print(f'Total upfront investments: {sum(investments)}')
+    result_dict['total_investment'] = round(sum(investments)) 
+    print(f'Total upfront investments: {round(sum(investments))} Pound')
 
     return result_dict

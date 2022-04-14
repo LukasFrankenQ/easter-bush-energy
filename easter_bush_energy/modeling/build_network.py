@@ -213,9 +213,11 @@ def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=Non
     heat_demand, _ = getter.get_demand_data()
     if storage_e_nom is None:
         storage_e_nom = heat_demand.sum() / 2.
-    print('Using storage heat capacity: ', storage_e_nom)
-    vol = storage_e_nom / (4.182 * 2.7778e-7 * 40) # (40: dT, 4.182: spec.heat.cap.water, rest: conversion const)
+    print(f'Using storage heat capacity: {storage_e_nom} kWh')
+    vol = storage_e_nom / (4.182 * 1000 * 1000 * 2.7778e-7 * 40) # (40: dT, 4.182: spec.heat.cap.water, rest: conversion const)
+    print(f'With volume: {vol} m**3')
     investment_cost = vol * 2600 * vol**(-0.47)
+    print('Which results in investment cost: ', investment_cost)
 
     constraint = getter.get_constraint_data()
 
