@@ -64,7 +64,7 @@ def run_scenario_2(start='2019-01-01', end='2019-02-01', dT_sts=40):
 
     network.lopf(solver_name='gurobi', extra_functionality=extra_functionality)
 
-    results = analyse(network)
+    results = analyse(network, getter)
     return results
 
 if __name__ == '__main__':

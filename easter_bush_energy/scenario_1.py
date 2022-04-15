@@ -45,4 +45,4 @@ if __name__ == '__main__':
 
     network.lopf(solver_name='gurobi', extra_functionality=chp_func)
 
-    analyse(network)
+    analyse(network, getter)
