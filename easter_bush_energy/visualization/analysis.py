@@ -3,13 +3,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use('bmh')
 
-def analyse(network):
+def analyse(network, getter):
     '''
     Creates plots for all system components and gives 
     some numbers on the system operation
 
     Args:
         network(pypsa.Network): Network that ran
+        getter(DataGetter as in data/datagetter.py): Helps with time-step-corrected visuals
 
     '''
 
@@ -61,6 +62,8 @@ def analyse(network):
         # plot results as area plot (sorted by variance)
         try:
             if get_costs:
+                if '30' in getter.freq:
+                    df = df.multiply(2.)
                 df[df.var(axis=0).sort_values().index].plot(ax=ax)
             else:
                 df[df.var(axis=0).sort_values().index].plot.area(ax=ax)
@@ -68,7 +71,6 @@ def analyse(network):
             continue
 
         ax.legend()
-
         ax.set_ylabel(ylabel)
 
     lp = network.links_t['p0']
