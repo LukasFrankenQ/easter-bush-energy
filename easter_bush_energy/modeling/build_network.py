@@ -129,14 +129,15 @@ def add_chp(network, getter):
     gas_mcost, _ = getter.get_market_data()
 
     network.add('Bus', 'gasmarket_chp_bus', carrier='gas')
+    network.add('Bus', 'chp_heatout_bus', carrier='heat')
     network.add('Generator', 'gasmarket_chp', bus='gasmarket_chp_bus', carrier='gas', marginal_cost=gas_mcost, p_nom=1500, 
                                         ramp_limit_up=10, ramp_limit_down=10) # hacky way to put ramp limits on chp
-    network.add('Link', 'chp2heat', bus0='gasmarket_chp_bus', bus1='heatloadbus', efficiency=0.9, p_nom_extendable=True)
+    network.add('Link', 'chp2heatout', bus0='gasmarket_chp_bus', bus1='chp_heatout_bus', efficiency=0.9, p_nom_extendable=True)
+    network.add('Link', 'heatout2load', bus0='chp_heatout_bus', bus1='heatloadbus', efficiency=1., p_nom_extendable=True)
     network.add('Link', 'chp2elec', bus0='gasmarket_chp_bus', bus1='elecloadbus', efficiency=0.468, p_nom_extendable=True)
 
-    network.links.at["chp2heat", "efficiency"] = (
-        network.links.at["chp2elec", "efficiency"] / c_v
-    )
+    network.links.at["chp2heatout", "efficiency"] = (
+        network.links.at["chp2elec", "efficiency"] / c_v)
 
     def extra_functionality(network, snapshots):
 
@@ -145,15 +146,15 @@ def add_chp(network, getter):
             rule=lambda model: network.links.at["chp2elec", "efficiency"]
             * nom_r
             * model.link_p_nom["chp2elec"]
-            == network.links.at["chp2heat", "efficiency"] * model.link_p_nom["chp2heat"]
+            == network.links.at["chp2heatout", "efficiency"] * model.link_p_nom["chp2heatout"]
         )
 
         # Guarantees c_m p_b1  \leq p_g1
         def backpressure(model, snapshot):
             return (
                 c_m
-                * network.links.at["chp2heat", "efficiency"]
-                * model.link_p["chp2heat", snapshot]
+                * network.links.at["chp2heatout", "efficiency"]
+                * model.link_p["chp2heatout", snapshot]
                 <= network.links.at["chp2elec", "efficiency"]
                 * model.link_p["chp2elec", snapshot]
             )
@@ -163,19 +164,18 @@ def add_chp(network, getter):
         # Guarantees p_g1 +c_v p_b1 \leq p_g1_nom
         def top_iso_fuel_line(model, snapshot):
             return (
-                model.link_p["chp2heat", snapshot] + model.link_p["chp2elec", snapshot]
+                model.link_p["chp2heatout", snapshot] + model.link_p["chp2elec", snapshot]
                 <= model.link_p_nom["chp2elec"]
             )
 
         network.model.top_iso_fuel_line = Constraint(
             list(snapshots), rule=top_iso_fuel_line
         )
-
     
     return extra_functionality
 
 
-def add_small_storage_and_heat_pump(network, getter, dT=40):
+def add_small_storage_and_heat_pump(network, getter, dT=40, p_nom=1500):
     '''
     Adds thermal storage with capacity fitted to the energy demand
     for a single day.
@@ -188,10 +188,12 @@ def add_small_storage_and_heat_pump(network, getter, dT=40):
 
     def get_hp_cop(p, dT=40):
         return (0.4113 * np.log(p) - 0.2575) * (23.9 * dT**(-0.747))
-    heatpump_p_nom = 1500
-    heatpump_cop = get_hp_cop(heatpump_p_nom, dT=dT)
-    if '30' in getter.freq:
-        heatpump_p_nom = heatpump_p_nom / 2.
+
+    heatpump_p_nom = p_nom
+    if heatpump_p_nom > 0:
+        heatpump_cop = get_hp_cop(heatpump_p_nom, dT=dT)
+    else:
+        heatpump_cop = 1.
 
     heat_demand, _ = getter.get_demand_data()
     storage_e_nom = 3500
@@ -199,6 +201,8 @@ def add_small_storage_and_heat_pump(network, getter, dT=40):
     # store
     network.add('Bus', 'storebus', carrier='heat')
     network.add('Store', 'store', bus='storebus', carrier='heat', e_nom=storage_e_nom)
+    network.add('Link', 'chpheat2store', bus0='chp_heatout_bus', bus1='storebus', efficiency=1., p_nom_extendable=True)
+    
     network.add('Link', 'store2heatload', bus0='storebus', bus1='heatloadbus', efficiency=0.9, p_nom=heatpump_p_nom)
     network.add('Link', 'heatpump2store', bus0='elecmarketbus', bus1='storebus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
     network.add('Link', 'heatpump2load', bus0='elecmarketbus', bus1='heatloadbus', efficiency=heatpump_cop, p_nom=heatpump_p_nom)
@@ -218,7 +222,7 @@ def add_small_storage_and_heat_pump(network, getter, dT=40):
     return extra_functionality 
 
 
-def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=None):
+def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=None, with_curtail=True):
     '''
     Adds thermal storage with capacity fitted to the energy demand
     for a single day.
@@ -235,15 +239,19 @@ def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=Non
     print(f'Using storage heat capacity: {storage_e_nom} kWh')
     vol = storage_e_nom / (4.182 * 1000 * 1000 * 2.7778e-7 * dT) # (40: dT, 4.182: spec.heat.cap.water, rest: conversion const)
     vol = storage_e_nom / (1000 * 0.000556 * 40) # (40: dT, 0.000556: spec.heat.cap.water, 1000: kg/m**3)
-    print(f'With volume: {vol} m**3')
+    print(f'With volume: {round(vol)} m**3')
     investment_cost = vol * 2600 * vol**(-0.47)
-    print('Which results in investment cost: ', investment_cost)
+    print('Which results in investment cost: ', round(investment_cost))
 
     constraint = getter.get_constraint_data()
-    # charging stes when wind power is curtailed
-    curtail_threshold = 100
-    curt = (constraint['SCOTEX Limit (MW)'] - constraint['SCOTEX Flow (MW)']) < curtail_threshold
-    curt = curt.astype(float)
+
+    if not with_curtail:
+        curt = pd.Series(np.zeros(len(constraint)), index=constraint.index)
+    else:
+        # charging stes when wind power is curtailed
+        curtail_threshold = 100
+        curt = (constraint['SCOTEX Limit (MW)'] - constraint['SCOTEX Flow (MW)']) < curtail_threshold
+        curt = curt.astype(float)
 
     # store
     network.add('Bus', 'curtailbus', carrier='elec')
@@ -263,12 +271,12 @@ def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=Non
 
     # power to charge seasonal storage from Renaldi et al. 2017
     heatpump_stes_p_nom = 170 # kW
-    if '30' in getter.freq:
-        heatpump_stes_p_nom = heatpump_stes_p_nom / 2. # kW
 
     network.add('Link', 'heatpump2stes', bus0='curtailbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_stes_p_nom)
+    network.add('Link', 'elecmarketheatpump2stes', bus0='elecmarketbus', bus1='stesbus', efficiency=heatpump_cop, p_nom=heatpump_stes_p_nom)
+    network.add('Link', 'chpheat2stes', bus0='chp_heatout_bus', bus1='stesbus', efficiency=1., p_nom_extendable=True)
     # can discharge into the smaller storage
-    network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=0.95, 
+    network.add('Link', 'stes2store', bus0='stesbus', bus1='storebus', efficiency=1., 
                     p_nom=heatpump_stes_p_nom)
 
             
@@ -279,7 +287,8 @@ def add_seasonal_storage_and_heat_pump(network, getter, dT=40, storage_e_nom=Non
             return (
                 model.link_p["heatpump2store", snapshot] +
                 model.link_p["heatpump2load", snapshot] +
-                model.link_p["heatpump2stes", snapshot] 
+                model.link_p["heatpump2stes", snapshot] +
+                model.link_p["elecmarketheatpump2stes", snapshot]
                 <= network.links.at['heatpump2store', 'p_nom'])
 
         network.model.heatpump = Constraint(list(snapshots), rule=stes_heatpump_func)

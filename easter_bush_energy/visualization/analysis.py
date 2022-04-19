@@ -86,15 +86,17 @@ def analyse(network, getter):
 
     # co2 emission per (gas powered) tech:
     gas_gen_index = list(network.buses.loc[network.buses.carrier == 'gas'].generator)
-    gas_gen = network.generators_t.p[gas_gen_index] 
+    # divide by two to account for time steps of 30 minutes
+    gas_gen = network.generators_t.p[gas_gen_index] / 2.
 
     gas_emission = round(gas_gen.sum().sum() * 0.184)   
 
     elec_gen = network.buses.loc[network.buses.carrier == 'elec']
     elec_gen = list(elec_gen.dropna().generator)
-    elec_gen = network.generators_t.p[elec_gen] 
+    # divide by two to account for time steps of 30 minutes
+    elec_gen = network.generators_t.p[elec_gen] / 2.
 
-    elec_emission = round(elec_gen.sum().sum() * 0.024)   
+    elec_emission = round(elec_gen.sum().sum() * 0.024)
 
     print(f'Emission by Gas approx {gas_emission} kg.')
     print(f'Emission by Electric Grid approx {elec_emission} kg.')

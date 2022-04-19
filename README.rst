@@ -15,16 +15,41 @@ easter-bush-energy
 
 
 
-
-energy systems models and optimization of the University of Edinburgh's Easter Bush Campus using curtailed wind po[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cthermal storages
-
-
-* Free software: MIT license
-* Documentation: https://easter-bush-energy.readthedocs.io.
+energy systems models and optimization of the University of Edinburgh's Easter Bush Campus
 
 
-Features
---------
+
+Scenarios
+===========
+
+ Scenario 1
+----------
+
+- chp
+- (backup gas boiler)
+- short term storage
+- fixed elec, gas prices
+
+Scenario 2
+----------
+
+- adding in heat pump
+
+Scenario 3
+----------
+
+- time of use pricing (half hourly (for elec))
+
+Scenario 4
+----------
+
+- Adding a seasonal storage
+
+Scenario 5
+----------
+
+- Curtailed Electricity
+
 
 * TODO
 

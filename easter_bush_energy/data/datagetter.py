@@ -33,6 +33,7 @@ class DataGetter:
     '''
     def __init__(self,
                  snapshots=None,
+                 static_elec_cost=False,
                  elec_cost_path=None,
                  gas_cost_path=None,
                  heat_demand_path=None,
@@ -47,6 +48,8 @@ class DataGetter:
             self.freq = pd.infer_freq(snapshots)
         else:
             self.freq = None
+        
+        self.static_elec_cost = static_elec_cost
 
         self.elec_cost_path = elec_cost_path or os.path.join(data_path, 
                                             'agileout.csv')
@@ -181,6 +184,11 @@ class DataGetter:
         df_heat = df_heat.Values
         df_elec = df_elec.Values
 
+        # express energy used every 30 minutes in power demand in kW
+        print('Transformed kWh use per 30 minutes to kW.')
+        df_heat = df_heat * 2
+        df_elec = df_elec * 2
+
         self.df_heat = df_heat
         self.df_elec = df_elec
 
@@ -230,6 +238,10 @@ class DataGetter:
         if static_gas_cost: 
             # gasprices = pd.Series(np.ones(len(gasprices)) * gasprices.mean())
             gasprices = pd.Series(np.ones(len(eprices)) * eprices.mean() / 2., index=eprices.index)
+        
+        if self.static_elec_cost: 
+            # gasprices = pd.Series(np.ones(len(gasprices)) * gasprices.mean())
+            eprices = pd.Series(np.ones(len(eprices)) * eprices.mean(), index=eprices.index)
 
 
         self.gas_cost = gasprices

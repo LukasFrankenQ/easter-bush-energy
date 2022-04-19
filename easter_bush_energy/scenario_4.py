@@ -21,21 +21,22 @@ from easter_bush_energy.modeling.build_network import (
             add_boiler,
             add_chp,
             add_small_storage_and_heat_pump,
+            add_seasonal_storage_and_heat_pump
             )
 from easter_bush_energy.visualization.analysis import analyse
 from easter_bush_energy.utils.network_utils import set_all
 
 
-def run_scenario_3(start='2019-01-01', end='2019-02-01'):
+def run_scenario_4(start='2019-01-01', end='2019-02-01', storage_e_nom=1_000_000, dT_sts=40, dT_lts=40):
     '''
-    Scenario 3: An expanded energy system at Easter Bush Campus: The same heat pump
+    Scenario 4: An expanded energy system at Easter Bush Campus: The same heat pump
                 now also can charge a seasonal thermal energy storage
         It includes:
             CHP
             HP
-                supplies 100m**3 hot water tanks, heat demand
+                supplies 100m**3 hot water tanks, heat demand, seasonal storage
             Boiler
-            Electricity Market (this time with half-hourly tarifs)
+            Electricity Market
 
     Args:
         start(str): start time of simulation
@@ -46,7 +47,7 @@ def run_scenario_3(start='2019-01-01', end='2019-02-01'):
     '''
 
     snapshots = pd.date_range(start, end, freq='30min')
-    getter = DataGetter(snapshots=snapshots, static_elec_cost=False)
+    getter = DataGetter(snapshots=snapshots)
 
     network = pypsa.Network()
     setup_carriers(network, getter)
@@ -60,10 +61,13 @@ def run_scenario_3(start='2019-01-01', end='2019-02-01'):
 
     chp_func = add_chp(network, getter)
 
-    add_small_storage_and_heat_pump(network, getter, p_nom=1500)
+    add_small_storage_and_heat_pump(network, getter, dT=dT_sts)
 
+    stes_extra_functionality = add_seasonal_storage_and_heat_pump(network, getter, storage_e_nom=storage_e_nom, dT=dT_lts)    
+    
     def extra_functionality(network, snapshots):
         chp_func(network, snapshots)
+        stes_extra_functionality(network, snapshots)
 
     network.lopf(solver_name='gurobi', extra_functionality=extra_functionality)
     results = analyse(network, getter)
@@ -73,5 +77,5 @@ def run_scenario_3(start='2019-01-01', end='2019-02-01'):
     return network, results
 
 if __name__ == "__main__":
-    # network, results = run_scenario_3(start='2019-01-01', end='2019-02-01')
-    run_scenario_3(start='2019-01-01', end='2020-01-01')
+    # network, results = run_scenario_4(start='2019-01-01', end='2019-02-01')
+    run_scenario_4(start='2019-01-01', end='2020-01-01')
